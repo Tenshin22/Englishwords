@@ -45,6 +45,7 @@ def open_errors():
 
 
 def practice(russia_words,english_words):
+    mark_check = 10
     while True:
         mark = 0
         
@@ -64,15 +65,17 @@ def practice(russia_words,english_words):
                 record_errors(eng_word, ru_word)
                 
             
-            mark_check = 10
-            text_answer = "1-продолжить тренировку\n2-выход"
+            text_answer = "1-продолжить тренировку\n2-выход\nВвод сюда: "
             if mark == mark_check:
                 user_choice = int(input(text_answer))
                 if user_choice == 1:
-                    mark_check += 5
+                    mark_check = mark_check + 5
                     print(f"Вы набрали {mark} баллов")
                 else:
                     print(f"Вы набрали {mark} баллов")
+                    break
+        if user_choice == 2:
+            break
 
 
 def error_correction():
