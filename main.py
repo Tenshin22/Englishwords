@@ -32,15 +32,13 @@ def record_errors(eng_word, ru_word):
     
 def open_errors():
     # открытие английских слов
-    file = open("word_error.txt", mode="r", encoding="utf-8")
-    user_errors = file.readlines()
-    file.close()
+    with open("word_error.txt", mode="r", encoding="utf-8") as file:
+        user_errors = file.readlines()
     
     
     # открытие русских слов
-    file = open("translate_errors.txt", mode="r", encoding="utf-8")
-    translate_errors = file.readlines()
-    file.close()
+    with open("translate_errors.txt", mode="r", encoding="utf-8") as file:
+        translate_errors = file.readlines()
     return user_errors, translate_errors
 
 
