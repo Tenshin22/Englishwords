@@ -114,7 +114,7 @@ def main_menu(russia_words,english_words):
 
 # Приветствие
 text_hello = "Добро пожаловать!\nМы будем показывать вам русское слово, а вы будете писать его английский перевод.\nНажмите Enter, чтобы продолжить: "
-hello_user = input(text_hello)
+input(text_hello)
 
 
 # меню тренажёра
