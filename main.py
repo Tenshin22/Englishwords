@@ -101,15 +101,17 @@ def error_correction():
 def main_menu(russia_words,english_words):
      while True:
          text_menu = "1 - тренировка\n2 - работа над ошибками\n3 - выйти\nВведите цифру: "
-         user_answer = int(input(text_menu))
+         user_answer = input(text_menu)
         
         
-         if user_answer == 1:
+         if user_answer == "1":
             practice(russia_words,english_words)
-         elif user_answer == 2:
-              error_correction()
+         elif user_answer == "2":
+            error_correction()
+         elif user_answer == "3":
+             exit("вы вышли из программы")
          else:
-             exit()
+             print("неизвестная комманда")
 
 
 # Приветствие
