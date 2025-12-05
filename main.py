@@ -16,6 +16,16 @@ russia_words = list(english_words)
 
 # Фукции
 def record_errors(eng_word, ru_word):
+    user_errors, translate_errors = open_errors()
+    i = 0
+    while i < len(user_errors):
+        user_errors[i] = user_errors[i].replace("\n", "")
+        i = i + 1
+    print(user_errors)
+    
+    
+    if eng_word in user_errors:
+        return
     # Запись английского слово в фаил
     eng_word = eng_word + "\n"
     file = open("word_error.txt", mode="a", encoding="utf-8")
