@@ -15,29 +15,40 @@ russia_words = list(english_words)
 
 
 # Фукции
-def record_errors(eng_word, ru_word):
-    user_errors, translate_errors = open_errors()
+def normalize_lines(lines):
     i = 0
-    while i < len(user_errors):
-        user_errors[i] = user_errors[i].replace("\n", "")
+    while i < len(lines):
+        lines[i] = lines[i].replace("\n", "")
         i = i + 1
-    print(user_errors)
+    return lines
+
+
+def record_errors(eng_word, ru_word):
+    """ Записывает ошибки пользователя
+        в два файла
+        
+        Принимает англ. слово где допущена ошибка и рус. слово, как перевод
+        """
+        
+        
+    eng_words = open_errors()[0] # извлекаю список с английскими словами
+    normalize_lines(lines=eng_words)
+
     
     
-    if eng_word in user_errors:
+    if eng_word in eng_words:
         return
     # Запись английского слово в фаил
     eng_word = eng_word + "\n"
-    file = open("word_error.txt", mode="a", encoding="utf-8")
-    file.write(eng_word)
-    file.close()
+    with open("word_error.txt", mode="a", encoding="utf-8") as file:
+        file.write(eng_word)
     
     
     # Запись русского слово в фаил
     ru_word = ru_word + "\n"
-    file = open("translate_errors.txt", mode="a", encoding="utf-8")
-    file.write(ru_word)
-    file.close()
+    with open("translate_errors.txt", mode="a", encoding="utf-8") as file:
+        file.write(ru_word)
+    
     
     
 def open_errors():
