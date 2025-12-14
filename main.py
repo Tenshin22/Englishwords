@@ -1,3 +1,8 @@
+# Константы
+WORD_ERRORS_PATH = "word_error.txt"
+TRANSLATE_ERRORS_PATH = "translate_errors.txt"
+
+
 # Словари
 english_words = {
     "город": "city", "вода": "water", "метро": "underground",
@@ -15,12 +20,20 @@ russia_words = list(english_words)
 
 
 # Фукции
+def read_lines(path):
+    """Читает файл и возвращает список строк. Если файла нет — возвращает пустой список."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.readlines()
+    except FileNotFoundError:
+        return []
+
+    
 def normalize_lines(lines):
     i = 0
     while i < len(lines):
         lines[i] = lines[i].replace("\n", "")
         i = i + 1
-    return lines
 
 
 def record_errors(eng_word, ru_word):
@@ -31,7 +44,7 @@ def record_errors(eng_word, ru_word):
         """
         
         
-    eng_words = open_errors()[0] # извлекаю список с английскими словами
+    eng_words = read_lines(path=WORD_ERRORS_PATH) # извлекаю список с английскими словами
     normalize_lines(lines=eng_words)
 
     
@@ -48,19 +61,6 @@ def record_errors(eng_word, ru_word):
     ru_word = ru_word + "\n"
     with open("translate_errors.txt", mode="a", encoding="utf-8") as file:
         file.write(ru_word)
-    
-    
-    
-def open_errors():
-    # открытие английских слов
-    with open("word_error.txt", mode="r", encoding="utf-8") as file:
-        user_errors = file.readlines()
-    
-    
-    # открытие русских слов
-    with open("translate_errors.txt", mode="r", encoding="utf-8") as file:
-        translate_errors = file.readlines()
-    return user_errors, translate_errors
 
 
 def practice(russia_words,english_words):
@@ -98,7 +98,8 @@ def practice(russia_words,english_words):
 
 
 def error_correction():
-    user_errors, translate_errors = open_errors()
+    user_errors = read_lines(path=WORD_ERRORS_PATH)
+    translate_errors = read_lines(path=TRANSLATE_ERRORS_PATH)
     
     
     print("Сейчас вы потренеруете слова в которых допустили ошибку")
