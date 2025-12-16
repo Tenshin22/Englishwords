@@ -3,9 +3,160 @@ import sys
 import builtins
 import io
 import importlib.util
+import contextlib
+import textwrap
+import time
 
 
 APP = None
+_ORIGINAL_STDOUT_ISATTY = sys.stdout.isatty()
+
+
+def _env_mode(name, default="auto"):
+    value = os.environ.get(name, default)
+    return value.strip().lower() if isinstance(value, str) else default
+
+
+def _env_flag(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def _should_use_color():
+    mode = _env_mode("TESTS_COLOR", "auto")
+    if mode in {"0", "false", "no", "off"}:
+        return False
+    if mode in {"1", "true", "yes", "force"}:
+        return True
+    return _ORIGINAL_STDOUT_ISATTY
+
+
+class _Ansi:
+    def __init__(self, enabled):
+        self.enabled = enabled
+        self.RESET = "\033[0m" if enabled else ""
+        self.BOLD = "\033[1m" if enabled else ""
+        self.DIM = "\033[2m" if enabled else ""
+        self.GREEN = "\033[32m" if enabled else ""
+        self.YELLOW = "\033[33m" if enabled else ""
+        self.RED = "\033[31m" if enabled else ""
+        self.CYAN = "\033[36m" if enabled else ""
+
+    def colorize(self, text, code):
+        if not self.enabled or not code:
+            return text
+        return f"{code}{text}{self.RESET}"
+
+
+ANSI = _Ansi(_should_use_color())
+VERBOSE = _env_flag("TESTS_VERBOSE", False)
+BRIEF = _env_flag("TESTS_BRIEF", False)
+COMPACT = _env_flag("TESTS_COMPACT", False)
+ONLY_FILTER = os.environ.get("TESTS_ONLY")
+MIN_DURATION_TO_SHOW = 0.01  # seconds
+
+
+KNOWN_ISSUE_TAGS = {
+    "test_known_issue_error_correction_should_accept_trim_and_case_insensitive": "UX",
+    "test_known_issue_error_correction_should_clear_fixed_errors": "DATA",
+    "test_known_issue_normalize_lines_should_remove_carriage_return": "ROB",
+    "test_known_issue_practice_can_exit_even_with_mistake": "UX",
+    "test_known_issue_practice_choice_should_not_crash_on_non_int": "ROB",
+    "test_known_issue_practice_writes_error_files_before_hang": "ROB",
+    "test_known_issue_read_lines_non_utf8_should_not_crash": "ROB",
+    "test_known_issue_record_errors_case_insensitive_no_duplicates": "DATA",
+    "test_known_issue_record_errors_should_ignore_empty_inputs": "DATA",
+    "test_known_issue_record_errors_should_keep_pairs_in_sync": "DATA",
+}
+
+TAG_LABELS = {
+    "UX": "UX/flow",
+    "ROB": "Robustness",
+    "DATA": "Data integrity",
+}
+
+
+def _known_tags_for_test(name):
+    tag = KNOWN_ISSUE_TAGS.get(name)
+    return [tag] if tag else []
+
+
+def _get_wrap_width():
+    try:
+        width = int(os.environ.get("TESTS_WIDTH", "96"))
+    except ValueError:
+        width = 96
+    return max(60, min(width, 140))
+
+
+def _status_color(status):
+    if status == "PASS":
+        return ANSI.GREEN
+    if status == "XFAIL":
+        return ANSI.YELLOW
+    if status == "XPASS":
+        return ANSI.RED
+    if status in {"FAIL", "ERROR"}:
+        return ANSI.RED
+    return ""
+
+
+def _format_status_lines(status, name, message="", index=None, total=None, tag=None, duration=None):
+    status_pad = status.ljust(5)
+    status_part = ANSI.colorize(status_pad, _status_color(status))
+    label_parts = []
+    if index is not None and total is not None:
+        width = max(2, len(str(total)))
+        label_parts.append(f"[{index:0{width}d}/{total}]")
+    label_parts.append(name)
+    if tag:
+        label_parts.append(f"[{tag}]")
+    if duration is not None and duration >= MIN_DURATION_TO_SHOW:
+        if duration < 1:
+            label_parts.append(f"({duration*1000:.0f}ms)")
+        else:
+            label_parts.append(f"({duration:.2f}s)")
+
+    label = " ".join(label_parts)
+
+    prefix_plain = f"{status_pad} {label}"
+    prefix_color = f"{status_part} {label}"
+
+    msg = (message or "").strip()
+    if not msg:
+        return [prefix_color]
+
+    if COMPACT:
+        wrap_width = _get_wrap_width() - len(prefix_plain) - 3
+        short = textwrap.shorten(msg, width=max(20, wrap_width), placeholder="…")
+        return [f"{prefix_color} — {short}"]
+
+    if BRIEF and status == "XFAIL":
+        wrap_width = _get_wrap_width() - len(prefix_plain) - 3
+        short = textwrap.shorten(msg, width=max(20, wrap_width), placeholder="…")
+        return [f"{prefix_color} — {short}"]
+
+    wrap_width = _get_wrap_width() - len(prefix_plain) - 3
+    if wrap_width < 20:
+        wrap_width = 20
+
+    wrapped = textwrap.wrap(msg, width=wrap_width) or [msg]
+    lines = [f"{prefix_color} — {wrapped[0]}"]
+    indent = " " * (len(prefix_plain) + (1 if COMPACT else 3))
+    for part in wrapped[1:]:
+        lines.append(f"{indent}{part}")
+    return lines
+
+
+def _print_captured_output(output):
+    if not output.strip():
+        return
+    header = ANSI.colorize("stdout:", ANSI.DIM)
+    print(f"    {header}")
+    for line in output.rstrip().splitlines():
+        print(f"      {line}")
 
 
 def _remove_all_in_dir(path):
@@ -610,6 +761,113 @@ def test_known_issue_practice_writes_error_files_before_hang():
 test_known_issue_practice_writes_error_files_before_hang.expected_failure = True
 
 
+def _collect_tests():
+    all_tests = []
+    for name, value in sorted(globals().items()):
+        if name.startswith("test_") and callable(value):
+            all_tests.append(value)
+
+    if ONLY_FILTER:
+        needle = ONLY_FILTER.lower()
+        filtered = [t for t in all_tests if needle in t.__name__.lower()]
+    else:
+        filtered = all_tests
+
+    return filtered, len(all_tests)
+
+
+def _run_single_test(test_func):
+    is_expected_failure = getattr(test_func, "expected_failure", False)
+    buf = io.StringIO()
+    start = time.perf_counter()
+    tags = _known_tags_for_test(test_func.__name__)
+
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            test_func()
+        status = "XPASS" if is_expected_failure else "PASS"
+        message = "ожидали падение, но тест прошёл" if is_expected_failure else ""
+    except AssertionError as e:
+        status = "XFAIL" if is_expected_failure else "FAIL"
+        message = str(e)
+    except Exception as e:
+        status = "XFAIL" if is_expected_failure else "ERROR"
+        message = f"{type(e).__name__}: {e}"
+
+    duration = time.perf_counter() - start
+    return {
+        "name": test_func.__name__,
+        "status": status,
+        "message": message,
+        "expected_failure": is_expected_failure,
+        "output": buf.getvalue(),
+        "duration": duration,
+        "tags": tags,
+    }
+
+
+def _print_header(total, all_total=None):
+    title = ANSI.colorize("Ручные автотесты", ANSI.BOLD)
+    detail = ANSI.colorize("(tests_manual.py)", ANSI.DIM)
+    print(f"{title} {detail} — {total} тестов")
+    legend = "Статусы: PASS=ok XFAIL=известная проблема XPASS=исправлено? FAIL=падение теста ERROR=исключение"
+    print(ANSI.colorize(legend, ANSI.DIM))
+    if ONLY_FILTER and all_total is not None and total != all_total:
+        print(ANSI.colorize(f"Фильтр TESTS_ONLY='{ONLY_FILTER}' — выбрано {total} из {all_total}", ANSI.DIM))
+    if COMPACT:
+        print(ANSI.colorize("Режим TESTS_COMPACT: короткие строки статусов", ANSI.DIM))
+    if BRIEF:
+        print(ANSI.colorize("Режим TESTS_BRIEF: XFAIL выводятся в одну строку", ANSI.DIM))
+    if not ANSI.enabled:
+        hint = "Цвет можно включить: export TESTS_COLOR=1"
+        print(ANSI.colorize(hint, ANSI.DIM))
+
+
+def _print_summary(results, duration, expected_total):
+    counts = {"PASS": 0, "FAIL": 0, "ERROR": 0, "XFAIL": 0, "XPASS": 0}
+    main_total = 0
+    main_passed = 0
+    tag_counts = {}
+
+    for res in results:
+        counts[res["status"]] = counts.get(res["status"], 0) + 1
+        if not res["expected_failure"]:
+            main_total += 1
+            if res["status"] == "PASS":
+                main_passed += 1
+        if res["status"] == "XFAIL":
+            for tag in res.get("tags", []):
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+    tag_parts = []
+    for tag in sorted(tag_counts):
+        tag_parts.append(f"{tag}={tag_counts[tag]}")
+    tag_suffix = f" [{', '.join(tag_parts)}]" if tag_parts else ""
+
+    core_part = f"Основные: {main_passed}/{main_total} PASS" if main_total else "Основные: 0/0"
+    issues_part = f"Известные проблемы: {expected_total} (XFAIL={counts['XFAIL']} XPASS={counts['XPASS']}){tag_suffix}"
+    fail_part = f" FAIL={counts['FAIL']} ERROR={counts['ERROR']}" if (counts["FAIL"] or counts["ERROR"]) else ""
+    summary = f"{core_part} · {issues_part}{fail_part} | {duration:.2f}s"
+
+    print(f"\n{ANSI.colorize('Итого:', ANSI.BOLD)} {summary}")
+
+    issues = [res for res in results if res["status"] == "XFAIL"]
+    if issues:
+        print(ANSI.colorize(f"Известные проблемы (XFAIL): {len(issues)}", ANSI.DIM))
+        width = _get_wrap_width() - 8
+        for idx, res in enumerate(sorted(issues, key=lambda r: (r.get("tags") or ["zzz"], r["name"])), 1):
+            tag_hint = f" [{', '.join(res['tags'])}]" if res.get("tags") else ""
+            header = f"  [{idx}] {res['name']}{tag_hint}"
+            print(header)
+            message = res["message"] or "(без описания)"
+            if BRIEF:
+                short = textwrap.shorten(message, width=max(20, width), placeholder="…")
+                print(f"       {short}")
+            else:
+                for part in textwrap.wrap(message, width=max(20, width)):
+                    print(f"       {part}")
+
+
 def main():
     repo_root = os.path.dirname(os.path.abspath(__file__))
     test_tmp = os.path.join(repo_root, ".test_tmp")
@@ -618,6 +876,7 @@ def main():
     _remove_all_in_dir(test_tmp)
 
     old_cwd = os.getcwd()
+    start_suite = time.perf_counter()
     try:
         os.chdir(test_tmp)
         sys.path.insert(0, repo_root)
@@ -627,43 +886,35 @@ def main():
 
         APP = APP_module
 
-        tests = []
-        for name, value in sorted(globals().items()):
-            if name.startswith("test_") and callable(value):
-                tests.append(value)
+        tests, all_total = _collect_tests()
+        total = len(tests)
+        expected_total = sum(1 for t in tests if getattr(t, "expected_failure", False))
 
-        passed = 0
-        failed = 0
-        xfailed = 0
-        xpassed = 0
+        _print_header(total, all_total=all_total)
 
-        for test_func in tests:
-            is_expected_failure = getattr(test_func, "expected_failure", False)
-            try:
-                test_func()
-                if is_expected_failure:
-                    print(f"XPASS: {test_func.__name__} (ожидали падение, но тест прошёл)")
-                    xpassed += 1
-                else:
-                    print(f"PASS: {test_func.__name__}")
-                    passed += 1
-            except AssertionError as e:
-                if is_expected_failure:
-                    print(f"XFAIL: {test_func.__name__}: {e}")
-                    xfailed += 1
-                else:
-                    print(f"FAIL: {test_func.__name__}: {e}")
-                    failed += 1
-            except Exception as e:
-                if is_expected_failure:
-                    print(f"XFAIL: {test_func.__name__}: {type(e).__name__}: {e}")
-                    xfailed += 1
-                else:
-                    print(f"ERROR: {test_func.__name__}: {type(e).__name__}: {e}")
-                    failed += 1
+        results = []
+        for index, test_func in enumerate(tests, 1):
+            res = _run_single_test(test_func)
+            results.append(res)
+            lines = _format_status_lines(
+                res["status"],
+                res["name"],
+                res["message"],
+                index=index,
+                total=total,
+                tag=",".join(res["tags"]) if res.get("tags") else None,
+                duration=res["duration"],
+            )
+            for line in lines:
+                print(line)
 
-        print(f"\nИтого: passed={passed} failed={failed} xfailed={xfailed} xpassed={xpassed}")
-        if failed:
+            if (res["status"] in {"FAIL", "ERROR", "XPASS"} or VERBOSE) and res["output"].strip():
+                _print_captured_output(res["output"])
+
+        duration_suite = time.perf_counter() - start_suite
+        _print_summary(results, duration_suite, expected_total=expected_total)
+
+        if any(res["status"] in {"FAIL", "ERROR"} for res in results):
             sys.exit(1)
     finally:
         try:
