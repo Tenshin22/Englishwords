@@ -53,13 +53,13 @@ def record_errors(eng_word, ru_word):
         return
     # Запись английского слово в фаил
     eng_word = eng_word + "\n"
-    with open("word_error.txt", mode="a", encoding="utf-8") as file:
+    with open(WORD_ERRORS_PATH, mode="a", encoding="utf-8") as file:
         file.write(eng_word)
     
     
     # Запись русского слово в фаил
     ru_word = ru_word + "\n"
-    with open("translate_errors.txt", mode="a", encoding="utf-8") as file:
+    with open(TRANSLATE_ERRORS_PATH, mode="a", encoding="utf-8") as file:
         file.write(ru_word)
 
 
@@ -67,6 +67,7 @@ def practice(russia_words,english_words):
     mark_check = 10
     while True:
         mark = 0
+        user_choice = 1
         
         
         for ru_word in russia_words:
@@ -106,7 +107,8 @@ def error_correction():
     
     mark = 0
     i = 0 
-    while i < len(translate_errors):
+    limit = min(len(user_errors), len(translate_errors))
+    while i < limit:
         user_error = user_errors[i].replace("\n", "")        
         translate_error = translate_errors[i].replace("\n", "")
         text_input = "Введите перевод этого слова:"
@@ -136,10 +138,14 @@ def main_menu(russia_words,english_words):
              print("неизвестная комманда")
 
 
-# Приветствие
-text_hello = "Добро пожаловать!\nМы будем показывать вам русское слово, а вы будете писать его английский перевод.\nНажмите Enter, чтобы продолжить: "
-input(text_hello)
+def run():
+    # Приветствие
+    text_hello = "Добро пожаловать!\nМы будем показывать вам русское слово, а вы будете писать его английский перевод.\nНажмите Enter, чтобы продолжить: "
+    input(text_hello)
+
+    # меню тренажёра
+    main_menu(russia_words,english_words)
 
 
-# меню тренажёра
-main_menu(russia_words,english_words)
+if __name__ == "__main__":
+    run()
