@@ -112,7 +112,7 @@ def error_correction():
         user_error = user_errors[i].replace("\n", "")        
         translate_error = translate_errors[i].replace("\n", "")
         text_input = "Введите перевод этого слова:"
-        user_answer = input(f"{text_input} {translate_error}\nПеревод сюда: ")
+        user_answer = input(f"{text_input} {translate_error}\nПеревод сюда: ").strip().lower()
         if user_answer == user_error:
             print("Вы ввели правильно!")
             mark += 1
