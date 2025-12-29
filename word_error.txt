@@ -1,5 +1,1 @@
-apple
 family
-city
-water
-city

@@ -103,23 +103,70 @@ def error_correction():
     translate_errors = read_lines(path=TRANSLATE_ERRORS_PATH)
     
     
-    print("Сейчас вы потренеруете слова в которых допустили ошибку")
-    
     mark = 0
     i = 0 
     limit = min(len(user_errors), len(translate_errors))
+    
+    if user_errors == []:
+        print("У вас нет ошибок")
+    else:
+        print("Сейчас вы потренеруете слова в которых допустили ошибку")
+    
+    
     while i < limit:
         user_error = user_errors[i].replace("\n", "")        
         translate_error = translate_errors[i].replace("\n", "")
+        
         text_input = "Введите перевод этого слова:"
         user_answer = input(f"{text_input} {translate_error}\nПеревод сюда: ").strip().lower()
+        
         if user_answer == user_error:
             print("Вы ввели правильно!")
             mark += 1
+            
+            user_errors.pop(i)
+            translate_errors.pop(i)
+            
+            limit = limit - 1
+            
         else:
             print(f"Вы ввели неправильно. Правильный ответ: {user_errors[i]}")
-        i += 1
+            i += 1
         print(f"Вы набрали {mark} баллов")
+        
+        
+    with open(WORD_ERRORS_PATH, mode="w", encoding="utf-8") as f:
+        limit = len(user_errors)
+        if limit == 0:
+            return
+            
+        if limit >= 1:
+            i = 0
+            while i < limit:
+                if i == limit - 1:
+                    user_error = user_errors[i]
+                    f.write(user_error)   
+                else:
+                    user_error = user_errors[i] + "\n"
+                    f.write(user_error)
+                i += 1
+            
+    
+    with open(TRANSLATE_ERRORS_PATH, mode="w", encoding="utf-8") as f:
+        limit = len(translate_errors)
+        if limit == 0:
+            return
+            
+        if limit >= 1:
+            i = 0
+            while i < limit:
+                if i == limit - 1:
+                    translate_error = translate_errors[i]
+                    f.write(translate_error)
+                else:
+                    translate_error = translate_errors[i] + "\n"
+                    f.write(translate_error)
+                i += 1
 
 
 def main_menu(russia_words,english_words):
